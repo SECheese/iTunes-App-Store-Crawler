@@ -38,7 +38,7 @@ sleep = 0
 sample = ''
 
 #Number of threads spawned to call the itunes store at one time. Must be an integer.
-threads = 40
+threads = 3
 
 #Set links_file to the name of the file with the initial list of links to scrape
 # Set app_info_file to the name of the file with the information for those links
@@ -69,9 +69,36 @@ def site_open(site):
            print('Could not connect to '+ site + '!')
            pass
 
+
+def dict_get(soup):
+    dic = {}
+    try:
+        dic['description'] = description_get(soup)
+        dic['title'] = title_get(soup)
+        dic['developer'] = dev_get(soup)
+        dic['price'] = price_get(soup)
+        dic['category'] = category_get(soup)
+        dic['version'] = version_get(soup)
+        dic['language'] = language_get(soup)
+        dic['copyright'] = copyright_get(soup)
+        dic['size'] =  size_get(soup)
+        dic['seller'] = seller_get(soup)
+        dic['rating'] = rating_get(soup)
+
+    except:
+        print("Error in dict generating")
+        pass
+
+    return dic
+
+
 def soup_site(site):
     '''opens site and turns it into a format to easily parse the DOM. Returns a Soup Object'''
     return BeautifulSoup(site_open(site))
+
+def description_get(soup): #new
+    return soup.find("div", "center-stack").find("p").text
+
 
 def title_get(soup):
     '''Returns App Title Text'''
@@ -94,10 +121,19 @@ def category_get(soup):
     #in the "left-stack" <div>
     return soup.find(id="left-stack").find("ul").find("li","genre").find("a").text
 
+def version_get(soup): #new
+    return soup.find(id="left-stack").find("ul").find_all("li")[3].find_all("span")[1].text
+
+def language_get(soup): #new
+    return soup.find(id="left-stack").find("ul").find("li", "language").text[10: ]
+
+def copyright_get(soup): #new
+    return soup.find(id="left-stack").find("ul").find("li", "copyright").text
+
 def size_get(soup):
     '''Returns size of file in MB'''
     #size is the text in the 5th <li> tag in the "left-stack" <div>
-    return soup.find(id="left-stack").find("ul").find_all("li")[4].text[6:]
+    return soup.find(id="left-stack").find("ul").find_all("li").__getitem(3).text[6:]
 
 def seller_get(soup):
     '''Returns Seller Name'''
@@ -304,6 +340,9 @@ def app_crawl_main_loop(data,writer):
     return
 
 def main():
+    print(dict_get(soup_site("https://itunes.apple.com/us/app/trvl/id391961927?mt=8%22")))
+    exit()
+
     '''Main function that runs either the general app store crawler
     or the individual app crawler, depending on what "operation" is set to
     at the head of the script.'''
