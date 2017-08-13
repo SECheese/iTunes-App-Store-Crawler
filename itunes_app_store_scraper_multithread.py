@@ -79,6 +79,34 @@ def soup_site(site):
 def description_get(soup): #new
     return soup.find("div", "center-stack").find("p").text
 
+def left_side_get(soup): #new
+    left_side_dic = {}
+    ls = soup.find(id="left-stack").find("ul").find_all("li")
+    n = len(ls)
+
+    for i in range(1, n):
+        span = ls[i].find_all("span")
+        span_size = len(span)
+
+        if span_size == 1:
+            key = ls[i].text.split(":")[0]
+            value = ls[i].text.split(":")[1]
+            left_side_dic[key] = value
+
+        elif span_size == 2:
+            key = span[0].text
+            value = span[1].text
+            left_side_dic[key] = value
+
+    return left_side_dic
+
+def copyright_get(soup): #new
+    return soup.find(id="left-stack").find("ul").find("li", "copyright").text
+
+def price_get(soup):
+    '''Returns price in $'''
+    #price is the text in the first <li> in the "left-stack" <div>
+    return soup.find(id="left-stack").find("ul").find("li").text
 
 def title_get(soup):
     '''Returns App Title Text'''
@@ -89,11 +117,6 @@ def dev_get(soup):
     '''Returns developer name text'''
     #dev name is the text in the <h2> tag in the "title" <div>
     return soup.find(id="title").find("h2").text[3:]
-
-def price_get(soup):
-    '''Returns price in $'''
-    #price is the text in the first <li> in the "left-stack" <div>
-    return soup.find(id="left-stack").find("ul").find("li").text
 
 def category_get(soup):
     '''Returns Category Name'''
@@ -106,9 +129,6 @@ def version_get(soup): #new
 
 def language_get(soup): #new
     return soup.find(id="left-stack").find("ul").find("li", "language").text[10: ]
-
-def copyright_get(soup): #new
-    return soup.find(id="left-stack").find("ul").find("li", "copyright").text
 
 def size_get(soup):
     '''Returns size of file in MB'''
@@ -130,9 +150,17 @@ def rating_get(soup):
     #splits array of stars and rating from the "aria-label" tag
     stars,rating = tag['aria-label'].split(',')
 
-    #return a tuple of stars and rating without whitespace
-    return (stars.strip(),rating.strip())
+    temp1 =  soup.find("div","app-rating").find("a").text
 
+    temp2 = ""
+    if soup.find("div","app-rating").find("ul") is not None:
+        temp2 = soup.find("div","app-rating").find("ul").text
+
+    #return a tuple of stars and rating without whitespace
+    return (stars.strip(),rating.strip()), temp1, temp2
+
+def compatibility_get(soup):
+    return soup.find(id="left-stack").find("p").find_all("span")[1].text
 
 def genre_link_list(site):
     '''Generator function that 
@@ -285,6 +313,8 @@ def app_crawl_main_loop(collection, data):
     return
 
 def main():
+    #print(description_get(soup_site("https://itunes.apple.com/us/app/kindle-read-ebooks-magazines-textbooks/id302584613?mt=8&ign-mpt=uo%3D2")))
+
     print(dict_get(soup_site("https://itunes.apple.com/us/app/trvl/id391961927?mt=8%22")))
 
     '''Main function that runs either the general app store crawler
