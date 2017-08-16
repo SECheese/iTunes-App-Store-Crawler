@@ -315,8 +315,6 @@ def app_crawl_main_loop(collection, data):
 
 
 def main():
-    print(rating_get(soup_site("https://itunes.apple.com/us/app/pandora-music-radio/id284035177?mt=8")))
-    exit()
     '''Main function that runs either the general app store crawler
     or the individual app crawler, depending on what "operation" is set to
     at the head of the script.'''
