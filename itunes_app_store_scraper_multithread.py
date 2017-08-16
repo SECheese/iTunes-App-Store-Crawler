@@ -69,6 +69,7 @@ def dict_get(soup):  # TODO make full dictionary of whole data including version
         dic['compatibility'] = compatibility_get(soup)
         dic['title'] = title_get(soup)
         dic['developer'] = dev_get(soup)
+        dic['whatsnew'] = whatsnew_get(soup)
 
     except:
         print("Something is missing in the page.")
@@ -84,6 +85,9 @@ def soup_site(site):
 
 def description_get(soup):  # new
     return soup.find("div", "center-stack").find("p").text
+
+def whatsnew_get(soup): #new
+    return soup.find("div", "center-stack").find_all("p")[1].text
 
 
 def left_side_get(soup):  # new
@@ -135,18 +139,21 @@ def rating_get(soup):
     # rating is located in the "aria-label" tag in the <div class="rating">
     # in the <div class="customer-ratings>
     tag = soup.find("div", "customer-ratings").find("div", "rating")
+    tag2 = soup.find("div", "customer-ratings").find_all("div", "rating")[1]
 
     # splits array of stars and rating from the "aria-label" tag
     stars, rating = tag['aria-label'].split(',')
+    stars2, rating2 = tag2['aria-label'].split(',')
 
     temp1 = soup.find("div", "app-rating").find("a").text
 
     temp2 = ""
+
     if soup.find("div", "app-rating").find("ul") is not None:
         temp2 = soup.find("div", "app-rating").find("ul").text
 
     # return a tuple of stars and rating without whitespace
-    return (stars.strip(), rating.strip()), temp1, temp2
+    return (stars.strip(), rating.strip()), (stars2.strip(), rating2.strip()), temp1, temp2,
 
 
 def compatibility_get(soup):
@@ -308,6 +315,8 @@ def app_crawl_main_loop(collection, data):
 
 
 def main():
+    print(rating_get(soup_site("https://itunes.apple.com/us/app/pandora-music-radio/id284035177?mt=8")))
+    exit()
     '''Main function that runs either the general app store crawler
     or the individual app crawler, depending on what "operation" is set to
     at the head of the script.'''
