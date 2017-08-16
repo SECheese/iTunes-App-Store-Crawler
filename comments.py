@@ -13,7 +13,7 @@ def read_in_from_apps_database(collection):
 def get_comments(id):
     comments_dic = {}
     for page in range(1, 11):
-        print("Page " + str(page) + ":")
+        # print("Page " + str(page) + ":")
         feedUrl = "https://itunes.apple.com/us/rss/customerreviews/id=" + str(id) + "/page=" + str(page) + "/sortBy=mostRecent/xml"
         # Connect to the site and download the feed data:
         feed = feedparser.parse(feedUrl)

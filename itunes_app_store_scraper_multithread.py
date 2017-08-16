@@ -14,6 +14,7 @@ from pymongo import MongoClient
 # Set operation to "store" in order to get the initial list of links to scrape
 # Set operation to "apps" in order to get the information for those links
 from comments import get_comments
+from pools import get_proxy, get_user_agent
 
 operation = "apps"
 
@@ -43,9 +44,11 @@ def site_open(site):
         req = urllib.request.Request(site)
 
         # adds User-Agent info to request object
-        req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) \
-         AppleWebKit/536.5 (KHTML, like Gecko) Chrome/19.0.1084.46 Safari/536.5")
-
+        req.add_header("User-Agent", get_user_agent())
+        # adds proxy to request object
+        proxy = urllib.request.ProxyHandler({'HTTP': get_proxy()})
+        opener = urllib.request.build_opener(proxy)
+        urllib.request.install_opener(opener)
         # opens up site
         website = urllib.request.urlopen(req)
 
@@ -305,10 +308,6 @@ def app_crawl_main_loop(collection, data):
 
 
 def main():
-    # print(description_get(soup_site("https://itunes.apple.com/us/app/kindle-read-ebooks-magazines-textbooks/id302584613?mt=8&ign-mpt=uo%3D2")))
-
-    print(dict_get(soup_site("https://itunes.apple.com/us/app/trvl/id391961927?mt=8%22")))
-
     '''Main function that runs either the general app store crawler
     or the individual app crawler, depending on what "operation" is set to
     at the head of the script.'''
