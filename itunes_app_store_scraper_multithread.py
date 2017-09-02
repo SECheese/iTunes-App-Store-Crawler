@@ -21,6 +21,15 @@ operation = "apps"
 # Set sleep time for the number of seconds between site requests (be polite!)
 sleep = 0
 
+# Set if you want to skip crawling existing
+skip_existing = True
+
+# Set if you want to remove link from links database when insert data on apps database
+remove_inserted = False
+
+# Set if you want to use proxy from proxy pool to request
+use_proxy = False
+
 # Set sample to an integer (not in the quotes) for the number of apps to get info for
 # out of the whole file
 
@@ -46,9 +55,10 @@ def site_open(site):
         # adds User-Agent info to request object
         req.add_header("User-Agent", get_user_agent())
         # adds proxy to request object
-        proxy = urllib.request.ProxyHandler({'HTTP': get_proxy()})
-        opener = urllib.request.build_opener(proxy)
-        urllib.request.install_opener(opener)
+        if use_proxy:
+            proxy = urllib.request.ProxyHandler({'HTTP': get_proxy()})
+            opener = urllib.request.build_opener(proxy)
+            urllib.request.install_opener(opener)
         # opens up site
         website = urllib.request.urlopen(req)
 
@@ -58,22 +68,45 @@ def site_open(site):
         pass
 
 
-def dict_get(soup):  # TODO make full dictionary of whole data including version and link(?)
+def dict_get(soup):
     dic = {}
+    page_title = title_get(soup)
     try:
         dic['description'] = description_get(soup)
-        dic['metadata'] = left_side_get(soup)
-        dic['price'] = price_get(soup)
-        dic['copyright'] = copyright_get(soup)
-        dic['rating'] = rating_get(soup)
-        dic['compatibility'] = compatibility_get(soup)
-        dic['title'] = title_get(soup)
-        dic['developer'] = dev_get(soup)
-        dic['whatsnew'] = whatsnew_get(soup)
-
     except:
-        print("Something is missing in the page.")
-        pass
+        print("Description is missing in the " + page_title)
+    try:
+        dic['metadata'] = left_side_get(soup)
+    except:
+        print("metadata is missing in the " + page_title)
+    try:
+        dic['price'] = price_get(soup)
+    except:
+        print("Price is missing in the " + page_title)
+    try:
+        dic['copyright'] = copyright_get(soup)
+    except:
+        print("Copyright is missing in the " + page_title)
+    try:
+        dic['rating'] = rating_get(soup)
+    except:
+        print("Rating is missing in the " + page_title)
+    try:
+        dic['compatibility'] = compatibility_get(soup)
+    except:
+        print("Compatibility is missing in the " + page_title)
+    try:
+        dic['title'] = title_get(soup)
+    except:
+        print("Title is missing in the " + page_title)
+    try:
+        dic['developer'] = dev_get(soup)
+    except:
+        print("Developer is missing in the " + page_title)
+    try:
+        dic['whatsnew'] = whatsnew_get(soup)
+    except:
+        print("Whatnew is missing in the " + page_title)
 
     return dic
 
@@ -139,21 +172,21 @@ def rating_get(soup):
     # rating is located in the "aria-label" tag in the <div class="rating">
     # in the <div class="customer-ratings>
     tag = soup.find("div", "customer-ratings").find("div", "rating")
-    tag2 = soup.find("div", "customer-ratings").find_all("div", "rating")[1]
+    try:
+        tag2 = soup.find("div", "customer-ratings").find_all("div", "rating")[1]
+    except:
+        tag2 = ""
 
     # splits array of stars and rating from the "aria-label" tag
     stars, rating = tag['aria-label'].split(',')
-    stars2, rating2 = tag2['aria-label'].split(',')
-
-    temp1 = soup.find("div", "app-rating").find("a").text
-
-    temp2 = ""
-
-    if soup.find("div", "app-rating").find("ul") is not None:
-        temp2 = soup.find("div", "app-rating").find("ul").text
+    try:
+        stars2, rating2 = tag2['aria-label'].split(',')
+    except:
+        stars2 = ""
+        rating2 = ""
 
     # return a tuple of stars and rating without whitespace
-    return (stars.strip(), rating.strip()), (stars2.strip(), rating2.strip()), temp1, temp2,
+    return (stars.strip(), rating.strip()), (stars2.strip(), rating2.strip())
 
 
 def compatibility_get(soup):
@@ -251,10 +284,10 @@ def split_data(data, splits):
     based on the number of threads the user designates.
     This is used for multithreading purposes'''
     n = round(len(data) / splits)
-    print(len(data))
+    print("Total links: " + str(len(data)))
     new_data = []
-    for i in range(0, splits):
-        j = data[(i - 1) * n:i * n]
+    for i in range(splits):
+        j = data[i*n:(i + 1) * n]
         new_data.append(j)
     return new_data
 
@@ -280,9 +313,10 @@ def app_info_crawl(source, output, sleep_time=float, sample_size=None, num_threa
     data = split_data(data, num_threads)
 
     # into the output csv
-    for link_list in data:
+    for i in range(len(data)):
+        link_list = data[i]
         # spawns thread and starts scrapping
-        t = threading.Thread(target=app_crawl_main_loop, args=(output, link_list))
+        t = threading.Thread(target=app_crawl_main_loop, args=(output, link_list, i))
         t.start()
     print('Completed Spawning Threads')
     return
@@ -292,15 +326,24 @@ def insert_to_apps_database(collection, document):  # TODO add update part to su
     collection.update({"_id": document['_id']}, document, upsert=True)
 
 
-def app_crawl_main_loop(collection, data):
+def exists_in_apps_database(collection, id):
+    if collection.count({'_id': id}) > 0:
+        return True
+    return False
+
+def app_crawl_main_loop(collection, data, thread_id):
     '''Called by a thread in app_info_crawl(). Loops through
     a sub-data array and writes output to a sub-csv file.'''
     for link_document in data:
         link = link_document.get("address")
-        print("Scrapping #" + str(link) + ".")
+        print("Thread #" + str(thread_id) + ": Scrapping " + str(link) + ".")
         try:
             # get a dictionary from app page to save in database
             info_document = dict_get(soup_site(link))
+            # check whether data was inserted before
+            if exists_in_apps_database(collection, link.split('/')[-1][2:-5]) and skip_existing:
+                print(str(link.split('/')[-1][2:-5]) + " skipped because of duplication")
+                continue
             info_document['_id'] = link.split('/')[-1][2:-5]
             info_document['link'] = link
             info_document['comments'] = get_comments(link.split('/')[-1][2:-5])
@@ -308,7 +351,7 @@ def app_crawl_main_loop(collection, data):
             insert_to_apps_database(collection, info_document)
         except:
             # continues loop of error is found and skips entry
-            print("Could not write to csv file for some reason =0")
+            print("Could not add " + str(link) + " to data")
             continue
     print('Completed Scrapping Data')
     return
