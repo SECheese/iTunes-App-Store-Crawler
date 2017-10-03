@@ -22,7 +22,7 @@ operation = "apps"
 sleep = 0
 
 # Set if you want to skip crawling existing
-skip_existing = True
+skip_existing = False
 
 # Set if you want to remove link from links database when insert data on apps database
 remove_inserted = False
@@ -38,6 +38,12 @@ sample = ''
 
 # Number of threads spawned to call the itunes store at one time. Must be an integer.
 threads = 2
+
+# Number of retries in case of unsuccessful attempt
+retries = 5
+
+# Maximum number of pages that we navigate for each letter in each genre
+num_of_letter_pages = 5
 
 # --------DO NOT TOUCH!----------#
 nav_site = "http://itunes.apple.com/us/genre/ios-books/id6018?mt=8"
@@ -106,7 +112,7 @@ def dict_get(soup):
     try:
         dic['whatsnew'] = whatsnew_get(soup)
     except:
-        print("Whatnew is missing in the " + page_title)
+        print("What's new is missing in the " + page_title)
 
     return dic
 
@@ -248,24 +254,24 @@ def general_app_store_crawl(collection, sleep_time=float):
         # loops through the alphabet to generate relevant sites
         # and insert to mongodb
         for letter in alphabet:
+            for page_number in range(1,num_of_letter_pages + 1):
+                # reconstructs URL
+                new_site = link + "&letter=" + letter + "&page=" + str(page_number)
+                print('Scraping from ' + new_site + '.')
 
-            # reconstructs URL
-            new_site = link + "&" + letter
-            print('Scraping from ' + new_site + '.')
+                # pause for politeness
+                time.sleep(sleep_time)
 
-            # pause for politeness
-            time.sleep(sleep_time)
-
-            # iteratively calls the app_link_list() function
-            for app in app_link_list(new_site):
-                # make document for link database
-                link_document = {
-                    "_id": app[0].split('/')[-1][2:-5],
-                    "address": app[0],
-                    "genre": str(link).split('/')[-2]
-                }
-                # add document to database
-                insert_to_links_database(link_document, collection)
+                # iteratively calls the app_link_list() function
+                for app in app_link_list(new_site):
+                    # make document for link database
+                    link_document = {
+                        "_id": app[0].split('/')[-1][2:-5],
+                        "address": app[0],
+                        "genre": str(link).split('/')[-2]
+                    }
+                    # add document to database
+                    insert_to_links_database(link_document, collection)
     print('Completed Scrapping')
     return
 
@@ -285,6 +291,8 @@ def split_data(data, splits):
     This is used for multithreading purposes'''
     n = round(len(data) / splits)
     print("Total links: " + str(len(data)))
+    for item in data:
+        item["attempts"] = 0
     new_data = []
     for i in range(splits):
         j = data[i*n:(i + 1) * n]
@@ -322,8 +330,17 @@ def app_info_crawl(source, output, sleep_time=float, sample_size=None, num_threa
     return
 
 
-def insert_to_apps_database(collection, document):  # TODO add update part to support adding new versions
-    collection.update({"_id": document['_id']}, document, upsert=True)
+def insert_to_apps_database(collection, document):
+    if exists_in_apps_database(collection, document.get('_id')):
+        old = collection.find_one({"_id": document.get('_id')})
+        # merge elder comments with new ones
+        old_comments = old.get('comments')
+        old_comments_size = len(old_comments)
+        old_comments.update(document.get('comments'))
+        collection.update({"_id": document['_id']}, {"$set": {"comments": old_comments}}, upsert=True)
+        print(str(old.get('_id')) + "'s comments are updated. Count: " + str(old_comments_size) + "->" + str(len(old_comments)))
+    else:
+        collection.update({"_id": document['_id']}, document, upsert=True)
 
 
 def exists_in_apps_database(collection, id):
@@ -334,25 +351,30 @@ def exists_in_apps_database(collection, id):
 def app_crawl_main_loop(collection, data, thread_id):
     '''Called by a thread in app_info_crawl(). Loops through
     a sub-data array and writes output to a sub-csv file.'''
-    for link_document in data:
-        link = link_document.get("address")
-        print("Thread #" + str(thread_id) + ": Scrapping " + str(link) + ".")
-        try:
-            # get a dictionary from app page to save in database
-            info_document = dict_get(soup_site(link))
-            # check whether data was inserted before
-            if exists_in_apps_database(collection, link.split('/')[-1][2:-5]) and skip_existing:
-                print(str(link.split('/')[-1][2:-5]) + " skipped because of duplication")
+    while(len(data) > 0):
+        for link_document in data:
+            link_document["attempts"] += 1
+            link = link_document.get("address")
+            print("Thread #" + str(thread_id) + ": Scrapping " + str(link) + ".")
+            try:
+                # get a dictionary from app page to save in database
+                info_document = dict_get(soup_site(link))
+                # check whether data was inserted before
+                if exists_in_apps_database(collection, link.split('/')[-1][2:-5]) and skip_existing:
+                    print(str(link.split('/')[-1][2:-5]) + " skipped because of duplication")
+                    continue
+                info_document['_id'] = link.split('/')[-1][2:-5]
+                info_document['link'] = link
+                info_document['comments'] = get_comments(link.split('/')[-1][2:-5])
+                # opens the site, parses out the data, and writes it into the csv
+                insert_to_apps_database(collection, info_document)
+                data.remove(link_document)
+            except:
+                # continues loop of error is found and skips entry
+                print("Could not add " + str(link) + " to data. Attempts: " + link_document["attempts"])
+                if link_document["attempts"] == retries:
+                    data.remove(link_document)
                 continue
-            info_document['_id'] = link.split('/')[-1][2:-5]
-            info_document['link'] = link
-            info_document['comments'] = get_comments(link.split('/')[-1][2:-5])
-            # opens the site, parses out the data, and writes it into the csv
-            insert_to_apps_database(collection, info_document)
-        except:
-            # continues loop of error is found and skips entry
-            print("Could not add " + str(link) + " to data")
-            continue
     print('Completed Scrapping Data')
     return
 
@@ -378,6 +400,8 @@ def main():
         apps = db.apps
         links = db.links
         start_time = time.time()
+        selected_links = [{"address" : "https://itunes.apple.com/us/app/butt-sworkit-free-workout-trainer-to-tone-lift/id1000708019?mt=8"},
+                          {"address" : "https://itunes.apple.com/us/app/deliveroo-restaurant-delivery-order-food-nearby/id1001501844?mt=8"}]
         app_info_crawl(links, apps, sleep, sample, threads)
         print(time.time() - start_time)
     else:
