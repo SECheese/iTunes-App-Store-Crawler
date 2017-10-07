@@ -282,6 +282,7 @@ def read_in_from_links_database(collection):
     data = []
     for document in collection.find():
         data.append(document)
+    shuffle(data)
     return data
 
 
@@ -371,7 +372,7 @@ def app_crawl_main_loop(collection, data, thread_id):
                 data.remove(link_document)
             except:
                 # continues loop of error is found and skips entry
-                print("Could not add " + str(link) + " to data. Attempts: " + link_document["attempts"])
+                print("Could not add " + str(link) + " to data. Attempts: " + str(link_document["attempts"]))
                 if link_document["attempts"] == retries:
                     data.remove(link_document)
                 continue

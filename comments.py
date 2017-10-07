@@ -22,10 +22,11 @@ def get_comments(id):
             comment_id = post.get('id').split('/')[-1]
             title = post.title
             comment_text = post.content[0]['value']
-            time = post.get('updated') #datetime.strptime(post.get('updated'), '%Y-%b-%d')#TODO
+            time = post.get('updated')
             rating = post.get('im_rating')
+            version = post.get('im_version')
             votecount = post.get('im_votecount')
             votesum = post.get('im_votesum')
             author = post.get('author_detail')
-            comments_dic[comment_id] = {'title': title, 'text': comment_text, 'time': time, 'rate': rating, 'plus_vote': votesum, 'vote_count': votecount, 'author': author}
+            comments_dic[comment_id] = {'title': title, 'text': comment_text, 'time': time,'version': version, 'rate': rating, 'plus_vote': votesum, 'vote_count': votecount, 'author': author}
     return comments_dic
