@@ -68,6 +68,7 @@ def site_open(site):
         print('Could not connect to ' + site + '!')
         pass
 
+
 def dict_get(soup):
     dic = {}
     page_title = title_get(soup)
@@ -101,27 +102,34 @@ def soup_site(site):
 
 
 def description_get(soup):
-    return soup.find("div", {"class":"section__description"}).find("p").get("aria-label")
+    return soup.find("div", {"class": "section__description"}).find("p").get("aria-label")
 
-def whatsnew_get(soup): #new
+
+def whatsnew_get(soup):  # new
     return soup.find("div", "center-stack").find_all("p")[1].text
+
 
 def versions_get(soup):
     versions = {}
-    history_items = soup.find("ul", {"class":"version-history__items"}).find_all("li", {"class":"version-history__item"})
+    history_items = soup.find("ul", {"class": "version-history__items"}).find_all("li",
+                                                                                  {"class": "version-history__item"})
     for item in history_items:
-        version_number = item.find("h4", {"class":"version-history__item__version-number"}).text
+        version_number = item.find("h4", {"class": "version-history__item__version-number"}).text
         versions[version_number] = {}
-        versions[version_number]['date'] = item.find("time", {"class":"version-history__item__release-date"}).get("aria-label")
-        versions[version_number]['note'] = item.find("div", {"class": "version-history__item__release-notes"}).get("aria-label")
+        versions[version_number]['date'] = item.find("time", {"class": "version-history__item__release-date"}).get(
+            "aria-label")
+        versions[version_number]['note'] = item.find("div", {"class": "version-history__item__release-notes"}).get(
+            "aria-label")
     return versions
 
 
 def info_get(soup):  # new
     informations = {}
-    information_list = soup.find("dl", {"class": "information-list"}).findAll("div", {"class":"information-list__item"})
+    information_list = soup.find("dl", {"class": "information-list"}).findAll("div",
+                                                                              {"class": "information-list__item"})
     for item in information_list:
-        informations[item.find("dt").text] = item.find("dd").text.replace('\n', '').replace("            ", '').replace("          ", '')
+        informations[item.find("dt").text] = item.find("dd").text.replace('\n', '').replace("            ", '').replace(
+            "          ", '')
     return informations
 
 
@@ -138,7 +146,7 @@ def price_get(soup):
 def title_get(soup):
     '''Returns App Title Text'''
     # title is the text in the <h1> tag in the "title" <div>
-    return soup.find("h1", {"class":"product-header__title"}).text.split('\n')[1][10:]
+    return soup.find("h1", {"class": "product-header__title"}).text.split('\n')[1][10:]
 
 
 def dev_get(soup):
@@ -146,18 +154,21 @@ def dev_get(soup):
     # dev name is the text in the <h2> tag in the "title" <div>
     return soup.find(id="title").find("h2").text[3:]
 
+
 def rating_get(soup):
     '''Returns tuple (# of Stars, # of Ratings)'''
 
     # rating is located in the "aria-label" tag in the <div class="rating">
     # in the <div class="customer-ratings>
-    avg = soup.find("div", {"class":"we-customer-ratings__stats"}).find("span", {"class":"we-customer-ratings__averages__display"}).text
-    count = soup.find("h4", {"class":"we-customer-ratings__count"}).text.split(' ')[0]
-    star_row = soup.findAll("div", {"class":"we-star-bar-graph__row"})
+    avg = soup.find("div", {"class": "we-customer-ratings__stats"}).find("span", {
+        "class": "we-customer-ratings__averages__display"}).text
+    count = soup.find("h4", {"class": "we-customer-ratings__count"}).text.split(' ')[0]
+    star_row = soup.findAll("div", {"class": "we-star-bar-graph__row"})
     stars = {}
-    for i in range(5,0,-1):
-        stars[str(i)] = star_row[5-i].find("div", {"class":"we-star-bar-graph__bar__foreground-bar"}).get("style").split(' ')[1][:-1]
-    return {'average' : avg, 'count':count, 'stars' : stars}
+    for i in range(5, 0, -1):
+        stars[str(i)] = \
+        star_row[5 - i].find("div", {"class": "we-star-bar-graph__bar__foreground-bar"}).get("style").split(' ')[1][:-1]
+    return {'average': avg, 'count': count, 'stars': stars}
 
 
 def compatibility_get(soup):
@@ -219,7 +230,7 @@ def general_app_store_crawl(collection, sleep_time=float):
         # loops through the alphabet to generate relevant sites
         # and insert to mongodb
         for letter in alphabet:
-            for page_number in range(1,num_of_letter_pages + 1):
+            for page_number in range(1, num_of_letter_pages + 1):
                 # reconstructs URL
                 new_site = link + "&letter=" + letter + "&page=" + str(page_number)
                 print('Scraping from ' + new_site + '.')
@@ -261,7 +272,7 @@ def split_data(data, splits):
         item["attempts"] = 0
     new_data = []
     for i in range(splits):
-        j = data[i*n:(i + 1) * n]
+        j = data[i * n:(i + 1) * n]
         new_data.append(j)
     return new_data
 
@@ -303,10 +314,17 @@ def insert_to_apps_database(collection, document):
         old_comments = old.get('comments')
         old_comments_size = len(old_comments)
         old_comments.update(document.get('comments'))
-        collection.update({"_id": document['_id']}, {"$set": {"comments": old_comments}}, upsert=True)
-        print(str(old.get('_id')) + "'s comments are updated. Count: " + str(old_comments_size) + "->" + str(len(old_comments)))
+        # merge elder versions with new ones
+        old_versions = old.get('versions')
+        old_versions.update(document.get('versions'))
+
+        collection.update({"_id": document['_id']}, {
+            "$set": {"comments": old_comments, "versions": old_versions, "metadata": document.get("metadata")}},
+                          upsert=True)
+        print(str(old.get('_id')) + "'s comments are updated. Count: " + str(old_comments_size) + "->" + str(
+            len(old_comments)))
     else:
-        collection.update({"_id": document['_id']}, document, upsert=True)
+        collection.update({"_id": document.get('_id')}, document, upsert=True)
 
 
 def exists_in_apps_database(collection, id):
@@ -314,10 +332,11 @@ def exists_in_apps_database(collection, id):
         return True
     return False
 
+
 def app_crawl_main_loop(collection, data, thread_id):
     '''Called by a thread in app_info_crawl(). Loops through
     a sub-data array and writes output to a sub-csv file.'''
-    while(len(data) > 0):
+    while (len(data) > 0):
         for link_document in data:
             link_document["attempts"] += 1
             link = link_document.get("address")
@@ -367,8 +386,10 @@ def main():
         apps = db.apps
         links = db.links
         start_time = time.time()
-        selected_links = [{"address" : "https://itunes.apple.com/us/app/butt-sworkit-free-workout-trainer-to-tone-lift/id1000708019?mt=8"},
-                          {"address" : "https://itunes.apple.com/us/app/deliveroo-restaurant-delivery-order-food-nearby/id1001501844?mt=8"}]
+        selected_links = [{
+                              "address": "https://itunes.apple.com/us/app/butt-sworkit-free-workout-trainer-to-tone-lift/id1000708019?mt=8"},
+                          {
+                              "address": "https://itunes.apple.com/us/app/deliveroo-restaurant-delivery-order-food-nearby/id1001501844?mt=8"}]
         app_info_crawl(links, apps, sleep, 0, threads)
         print(time.time() - start_time)
     else:
@@ -378,7 +399,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-
-
