@@ -1,3 +1,4 @@
+import string
 import urllib.request
 from urllib.parse import urlparse, parse_qs
 from bs4 import BeautifulSoup
@@ -8,13 +9,13 @@ from random import shuffle
 import threading
 
 from pymongo import MongoClient
+from comments import get_comments
+from pools import get_proxy, get_user_agent
 
 # --------User Set These Global Variables----------#
 
 # Set operation to "store" in order to get the initial list of links to scrape
 # Set operation to "apps" in order to get the information for those links
-from comments import get_comments
-from pools import get_proxy, get_user_agent
 
 operation = "apps"
 
@@ -29,12 +30,6 @@ remove_inserted = False
 
 # Set if you want to use proxy from proxy pool to request
 use_proxy = False
-
-# Set sample to an integer (not in the quotes) for the number of apps to get info for
-# out of the whole file
-
-# Set sample to '' to crawl the whole data set at once
-sample = ''
 
 # Number of threads spawned to call the itunes store at one time. Must be an integer.
 threads = 2
@@ -73,7 +68,6 @@ def site_open(site):
         print('Could not connect to ' + site + '!')
         pass
 
-
 def dict_get(soup):
     dic = {}
     page_title = title_get(soup)
@@ -82,37 +76,21 @@ def dict_get(soup):
     except:
         print("Description is missing in the " + page_title)
     try:
-        dic['metadata'] = left_side_get(soup)
+        dic['metadata'] = info_get(soup)
     except:
         print("metadata is missing in the " + page_title)
-    try:
-        dic['price'] = price_get(soup)
-    except:
-        print("Price is missing in the " + page_title)
-    try:
-        dic['copyright'] = copyright_get(soup)
-    except:
-        print("Copyright is missing in the " + page_title)
     try:
         dic['rating'] = rating_get(soup)
     except:
         print("Rating is missing in the " + page_title)
     try:
-        dic['compatibility'] = compatibility_get(soup)
-    except:
-        print("Compatibility is missing in the " + page_title)
-    try:
         dic['title'] = title_get(soup)
     except:
         print("Title is missing in the " + page_title)
     try:
-        dic['developer'] = dev_get(soup)
+        dic['versions'] = versions_get(soup)
     except:
-        print("Developer is missing in the " + page_title)
-    try:
-        dic['whatsnew'] = whatsnew_get(soup)
-    except:
-        print("What's new is missing in the " + page_title)
+        print("Version history is missing in the " + page_title)
 
     return dic
 
@@ -122,33 +100,29 @@ def soup_site(site):
     return BeautifulSoup(site_open(site))
 
 
-def description_get(soup):  # new
-    return soup.find("div", "center-stack").find("p").text
+def description_get(soup):
+    return soup.find("div", {"class":"section__description"}).find("p").get("aria-label")
 
 def whatsnew_get(soup): #new
     return soup.find("div", "center-stack").find_all("p")[1].text
 
+def versions_get(soup):
+    versions = {}
+    history_items = soup.find("ul", {"class":"version-history__items"}).find_all("li", {"class":"version-history__item"})
+    for item in history_items:
+        version_number = item.find("h4", {"class":"version-history__item__version-number"}).text
+        versions[version_number] = {}
+        versions[version_number]['date'] = item.find("time", {"class":"version-history__item__release-date"}).get("aria-label")
+        versions[version_number]['note'] = item.find("div", {"class": "version-history__item__release-notes"}).get("aria-label")
+    return versions
 
-def left_side_get(soup):  # new
-    left_side_dic = {}
-    ls = soup.find(id="left-stack").find("ul").find_all("li")
-    n = len(ls)
 
-    for i in range(1, n):
-        span = ls[i].find_all("span")
-        span_size = len(span)
-
-        if span_size == 1:
-            key = ls[i].text.split(":")[0][:-2]
-            value = ls[i].text.split(":")[1]
-            left_side_dic[key] = value
-
-        elif span_size == 2:
-            key = span[0].text[:-2]
-            value = span[1].text
-            left_side_dic[key] = value
-
-    return left_side_dic
+def info_get(soup):  # new
+    informations = {}
+    information_list = soup.find("dl", {"class": "information-list"}).findAll("div", {"class":"information-list__item"})
+    for item in information_list:
+        informations[item.find("dt").text] = item.find("dd").text.replace('\n', '').replace("            ", '').replace("          ", '')
+    return informations
 
 
 def copyright_get(soup):  # new
@@ -164,7 +138,7 @@ def price_get(soup):
 def title_get(soup):
     '''Returns App Title Text'''
     # title is the text in the <h1> tag in the "title" <div>
-    return soup.find(id="title").find("h1").text
+    return soup.find("h1", {"class":"product-header__title"}).text.split('\n')[1][10:]
 
 
 def dev_get(soup):
@@ -177,22 +151,13 @@ def rating_get(soup):
 
     # rating is located in the "aria-label" tag in the <div class="rating">
     # in the <div class="customer-ratings>
-    tag = soup.find("div", "customer-ratings").find("div", "rating")
-    try:
-        tag2 = soup.find("div", "customer-ratings").find_all("div", "rating")[1]
-    except:
-        tag2 = ""
-
-    # splits array of stars and rating from the "aria-label" tag
-    stars, rating = tag['aria-label'].split(',')
-    try:
-        stars2, rating2 = tag2['aria-label'].split(',')
-    except:
-        stars2 = ""
-        rating2 = ""
-
-    # return a tuple of stars and rating without whitespace
-    return (stars.strip(), rating.strip()), (stars2.strip(), rating2.strip())
+    avg = soup.find("div", {"class":"we-customer-ratings__stats"}).find("span", {"class":"we-customer-ratings__averages__display"}).text
+    count = soup.find("h4", {"class":"we-customer-ratings__count"}).text.split(' ')[0]
+    star_row = soup.findAll("div", {"class":"we-star-bar-graph__row"})
+    stars = {}
+    for i in range(5,0,-1):
+        stars[str(i)] = star_row[5-i].find("div", {"class":"we-star-bar-graph__bar__foreground-bar"}).get("style").split(' ')[1][:-1]
+    return {'average' : avg, 'count':count, 'stars' : stars}
 
 
 def compatibility_get(soup):
@@ -360,6 +325,7 @@ def app_crawl_main_loop(collection, data, thread_id):
             try:
                 # get a dictionary from app page to save in database
                 info_document = dict_get(soup_site(link))
+                print(info_document)
                 # check whether data was inserted before
                 if exists_in_apps_database(collection, link.split('/')[-1][2:-5]) and skip_existing:
                     print(str(link.split('/')[-1][2:-5]) + " skipped because of duplication")
@@ -403,7 +369,7 @@ def main():
         start_time = time.time()
         selected_links = [{"address" : "https://itunes.apple.com/us/app/butt-sworkit-free-workout-trainer-to-tone-lift/id1000708019?mt=8"},
                           {"address" : "https://itunes.apple.com/us/app/deliveroo-restaurant-delivery-order-food-nearby/id1001501844?mt=8"}]
-        app_info_crawl(links, apps, sleep, sample, threads)
+        app_info_crawl(links, apps, sleep, 0, threads)
         print(time.time() - start_time)
     else:
         print('You need to set "operation" to "store" or "apps"!')
