@@ -1,4 +1,3 @@
-import string
 import urllib.request
 from urllib.parse import urlparse, parse_qs
 from bs4 import BeautifulSoup
@@ -9,13 +8,13 @@ from random import shuffle
 import threading
 
 from pymongo import MongoClient
-from comments import get_comments
-from pools import get_proxy, get_user_agent
 
 # --------User Set These Global Variables----------#
 
 # Set operation to "store" in order to get the initial list of links to scrape
 # Set operation to "apps" in order to get the information for those links
+from comments import get_comments
+from pools import get_proxy, get_user_agent
 
 operation = "apps"
 
@@ -31,19 +30,25 @@ remove_inserted = False
 # Set if you want to use proxy from proxy pool to request
 use_proxy = False
 
+# Set sample to an integer (not in the quotes) for the number of apps to get info for
+# out of the whole file
+
+# Set sample to '' to crawl the whole data set at once
+sample = ''
+
 # Number of threads spawned to call the itunes store at one time. Must be an integer.
-threads = 2
+threads = 5
 
 # Number of retries in case of unsuccessful attempt
-retries = 5
+retries = 3
 
 # Maximum number of pages that we navigate for each letter in each genre
-num_of_letter_pages = 5
+num_of_letter_pages = 1
 
 # --------DO NOT TOUCH!----------#
-nav_site = "http://itunes.apple.com/us/genre/ios-books/id6018?mt=8"
-alphabet = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
-            'U', 'V', 'W', 'X', 'Y', 'Z']
+nav_site = "https://itunes.apple.com/us/genre/ios-shopping/id6024?mt=8"
+alphabet = ['#']#, 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
+           # 'U', 'V', 'W', 'X', 'Y', 'Z']
 
 
 # --------Program Functions----------#
@@ -77,9 +82,9 @@ def dict_get(soup):
     except:
         print("Description is missing in the " + page_title)
     try:
-        dic['metadata'] = info_get(soup)
+        dic['information'] = information_get(soup)
     except:
-        print("metadata is missing in the " + page_title)
+        print("information is missing in the " + page_title)
     try:
         dic['rating'] = rating_get(soup)
     except:
@@ -95,18 +100,30 @@ def dict_get(soup):
 
     return dic
 
-
 def soup_site(site):
     '''opens site and turns it into a format to easily parse the DOM. Returns a Soup Object'''
     return BeautifulSoup(site_open(site))
 
 
-def description_get(soup):
-    return soup.find("div", {"class": "section__description"}).find("p").get("aria-label")
+def description_get(soup):  #redesigned
+    return soup.find("div", "section__description").find("span").text
 
-
-def whatsnew_get(soup):  # new
+def whatsnew_get(soup): #new
     return soup.find("div", "center-stack").find_all("p")[1].text
+
+
+def information_get(soup):  #redesigned
+    information_dic = {}
+    info_soup = soup.find_all("div", "information-list__item l-row")
+
+    for info in info_soup:
+        key = info.find("dt").text
+        value = info.find("dd").text.replace('\n', '').replace("            ", '').replace(
+            "          ", '')
+        if(len(key)>0):
+            information_dic[key] = value
+
+    return information_dic
 
 
 def versions_get(soup):
@@ -118,19 +135,8 @@ def versions_get(soup):
         versions[version_number] = {}
         versions[version_number]['date'] = item.find("time", {"class": "version-history__item__release-date"}).get(
             "aria-label")
-        versions[version_number]['note'] = item.find("div", {"class": "version-history__item__release-notes"}).get(
-            "aria-label")
+        versions[version_number]['note'] = item.find("div", {"class": "version-history__item__release-notes"}).find("span").text
     return versions
-
-
-def info_get(soup):  # new
-    informations = {}
-    information_list = soup.find("dl", {"class": "information-list"}).findAll("div",
-                                                                              {"class": "information-list__item"})
-    for item in information_list:
-        informations[item.find("dt").text] = item.find("dd").text.replace('\n', '').replace("            ", '').replace(
-            "          ", '')
-    return informations
 
 
 def copyright_get(soup):  # new
@@ -146,14 +152,13 @@ def price_get(soup):
 def title_get(soup):
     '''Returns App Title Text'''
     # title is the text in the <h1> tag in the "title" <div>
-    return soup.find("h1", {"class": "product-header__title"}).text.split('\n')[1][10:]
+    return soup.find("h1", "product-header__title").text.split('\n')[1][12:]
 
 
 def dev_get(soup):
     '''Returns developer name text'''
     # dev name is the text in the <h2> tag in the "title" <div>
     return soup.find(id="title").find("h2").text[3:]
-
 
 def rating_get(soup):
     '''Returns tuple (# of Stars, # of Ratings)'''
@@ -169,6 +174,7 @@ def rating_get(soup):
         stars[str(i)] = \
         star_row[5 - i].find("div", {"class": "we-star-bar-graph__bar__foreground-bar"}).get("style").split(' ')[1][:-1]
     return {'average': avg, 'count': count, 'stars': stars}
+
 
 
 def compatibility_get(soup):
@@ -230,9 +236,9 @@ def general_app_store_crawl(collection, sleep_time=float):
         # loops through the alphabet to generate relevant sites
         # and insert to mongodb
         for letter in alphabet:
-            for page_number in range(1, num_of_letter_pages + 1):
+            for page_number in range(1,num_of_letter_pages + 1):
                 # reconstructs URL
-                new_site = link + "&letter=" + letter + "&page=" + str(page_number)
+                new_site = link + "&leter=" + letter + "&page=" + str(page_number)
                 print('Scraping from ' + new_site + '.')
 
                 # pause for politeness
@@ -272,7 +278,7 @@ def split_data(data, splits):
         item["attempts"] = 0
     new_data = []
     for i in range(splits):
-        j = data[i * n:(i + 1) * n]
+        j = data[i*n:(i + 1) * n]
         new_data.append(j)
     return new_data
 
@@ -319,7 +325,7 @@ def insert_to_apps_database(collection, document):
         old_versions.update(document.get('versions'))
 
         collection.update({"_id": document['_id']}, {
-            "$set": {"comments": old_comments, "versions": old_versions, "metadata": document.get("metadata")}},
+            "$set": {"comments": old_comments, "versions": old_versions, "information": document.get("information")}},
                           upsert=True)
         print(str(old.get('_id')) + "'s comments are updated. Count: " + str(old_comments_size) + "->" + str(
             len(old_comments)))
@@ -332,11 +338,10 @@ def exists_in_apps_database(collection, id):
         return True
     return False
 
-
 def app_crawl_main_loop(collection, data, thread_id):
     '''Called by a thread in app_info_crawl(). Loops through
     a sub-data array and writes output to a sub-csv file.'''
-    while (len(data) > 0):
+    while(len(data) > 0):
         for link_document in data:
             link_document["attempts"] += 1
             link = link_document.get("address")
@@ -344,7 +349,6 @@ def app_crawl_main_loop(collection, data, thread_id):
             try:
                 # get a dictionary from app page to save in database
                 info_document = dict_get(soup_site(link))
-                print(info_document)
                 # check whether data was inserted before
                 if exists_in_apps_database(collection, link.split('/')[-1][2:-5]) and skip_existing:
                     print(str(link.split('/')[-1][2:-5]) + " skipped because of duplication")
@@ -383,14 +387,12 @@ def main():
 
     # runs the app info crawl and prints out total time spent
     elif operation == 'apps':
-        apps = db.apps
-        links = db.links
+        apps = db.selectedApps
+        links = db.selectedLinks
         start_time = time.time()
-        selected_links = [{
-                              "address": "https://itunes.apple.com/us/app/butt-sworkit-free-workout-trainer-to-tone-lift/id1000708019?mt=8"},
-                          {
-                              "address": "https://itunes.apple.com/us/app/deliveroo-restaurant-delivery-order-food-nearby/id1001501844?mt=8"}]
-        app_info_crawl(links, apps, sleep, 0, threads)
+        selected_links = [{"address" : "https://itunes.apple.com/us/app/butt-sworkit-free-workout-trainer-to-tone-lift/id1000708019?mt=8"},
+                         {"address" : "https://itunes.apple.com/us/app/deliveroo-restaurant-delivery-order-food-nearby/id1001501844?mt=8"}]
+        app_info_crawl(links, apps, sleep, sample, threads)
         print(time.time() - start_time)
     else:
         print('You need to set "operation" to "store" or "apps"!')
@@ -399,3 +401,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+
+
